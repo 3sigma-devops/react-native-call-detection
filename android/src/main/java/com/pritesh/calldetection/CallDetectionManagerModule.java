@@ -27,6 +27,7 @@ public class CallDetectionManagerModule
     private CallStateUpdateActionModule jsModule = null;
     private CallDetectionPhoneStateListener callDetectionPhoneStateListener;
     private Activity activity = null;
+    private boolean isListenerRegistered = false;
 
     public CallDetectionManagerModule(ReactApplicationContext reactContext) {
         super(reactContext);
@@ -40,9 +41,16 @@ public class CallDetectionManagerModule
 
     @ReactMethod
     public void startListener() {
+        // Don't register if already registered
+        if (isListenerRegistered) {
+            return;
+        }
+
         if (activity == null) {
             activity = getCurrentActivity();
-            activity.getApplication().registerActivityLifecycleCallbacks(this);
+            if (activity != null) {
+                activity.getApplication().registerActivityLifecycleCallbacks(this);
+            }
         }
 
         telephonyManager = (TelephonyManager) this.reactContext.getSystemService(
@@ -50,15 +58,23 @@ public class CallDetectionManagerModule
         callDetectionPhoneStateListener = new CallDetectionPhoneStateListener(this);
         telephonyManager.listen(callDetectionPhoneStateListener,
                 PhoneStateListener.LISTEN_CALL_STATE);
-
+        
+        isListenerRegistered = true;
     }
 
     @ReactMethod
     public void stopListener() {
-        telephonyManager.listen(callDetectionPhoneStateListener,
-                PhoneStateListener.LISTEN_NONE);
+        if (!isListenerRegistered) {
+            return;
+        }
+
+        if (telephonyManager != null && callDetectionPhoneStateListener != null) {
+            telephonyManager.listen(callDetectionPhoneStateListener,
+                    PhoneStateListener.LISTEN_NONE);
+        }
         telephonyManager = null;
         callDetectionPhoneStateListener = null;
+        isListenerRegistered = false;
     }
 
     /**
@@ -107,7 +123,15 @@ public class CallDetectionManagerModule
 
     @Override
     public void onActivityDestroyed(Activity activity) {
+        if (this.activity == activity) {
+            stopListener();
+        }
+    }
 
+    @Override
+    public void onCatalystInstanceDestroy() {
+        super.onCatalystInstanceDestroy();
+        stopListener();
     }
 
     @Override
